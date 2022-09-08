@@ -63,8 +63,14 @@ float diff[3];
 float pos[2];
 float a_g = 6378000;
 float b = 6357000;
+
+float r_a = 6378137.0 //IERS  WGS-84 ellipsoid, semi-major axis (a) 6378137.0 
+float r_b = 6356752.3142 //IERS  WGS-84 ellipsoid, semi-minor axis (b) 6356752.3142
+
+
 float Rm = 6314197.7987; //radio meridional de la tierra https://cosasdeingenierossite.wordpress.com/2017/06/12/filtro-de-kalman-fusion-sensorial-de-acelerometros-y-gps/
 float Rp = 6356752.3142; //radio trasversal de la tierra
+
 
 int lim = 20;
 int counter;
@@ -175,6 +181,10 @@ void get_sensor_data() {
 void llt2ecef(float * ecef, float lattitud, float longitud, float high) {
   lattitud = ToRad(lattitud);
   longitud = ToRad(longitud);
+  ecef[0] = (a_g + high) * cos(lattitud) * cos(longitud);
+  ecef[1] = (a_g + high) * cos(lattitud) * sin(longitud);
+  ecef[2] = (a_g + high) * sin(lattitud);
+
   ecef[0] = (a_g + high) * cos(lattitud) * cos(longitud);
   ecef[1] = (a_g + high) * cos(lattitud) * sin(longitud);
   ecef[2] = (a_g + high) * sin(lattitud);
