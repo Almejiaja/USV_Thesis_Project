@@ -32,15 +32,15 @@ using namespace BLA;
 #define Ncom 1   // length of the control vector
 
 // measurement std (to be characterized from your sensors) GPS
-#define n1 3.13 // noise on the 1st measurement component
-#define n2 0.1 // noise on the 2nd measurement component 
+#define n1 1.1 // noise on the 1st measurement component
+#define n2 0.01 // noise on the 2nd measurement component 
 
 // model std (~1/inertia). Freedom you give to relieve your evolution equation
 //#define m1 0.01
 //#define m2 0.02
 
-#define m1 0.01
-#define m2 0.02
+#define m1 0.03
+#define m2 0.03
 
 #define r_a  6378137.0 //IERS  WGS-84 ellipsoid, semi-major axis (a) 6378137.0
 #define r_b  6356752.3142 //IERS  WGS-84 ellipsoid, semi-minor axis (b) 6356752.3142
@@ -114,12 +114,13 @@ void setup() {
   K.R = {n1 * n1,   0.0,
          0.0, n2 * n2
         };
+
   // example of model covariance matrix. Size is <Nstate,Nstate>
   K.Q = {m1 * m1,   0.0,
          0.0, m2 * m2
         };
 
-  delay(1000);
+  delay(5000);
   timer = millis();
 
 }
@@ -170,21 +171,17 @@ void loop() {
   //    a_abs = abs(a_abs - 1.055697); //se resta valor de la gravedad
 
   a_abs = sqrt(a_x_d * a_x_d + a_y_d * a_y_d);
-  //a_abs = a_abs * 9.8;
+  a_abs = a_abs * 9.8;
 
-  vel = vel_0 + (a_abs * G_Dt);
-  pos = pos_0 + vel_0 * G_Dt + ((G_Dt * G_Dt) * 0.5 * a_abs); //Vector de posicion medido con el IMU
 
-  vel_0 = vel;
-  pos_0 = pos;
-
-  //    if (a_abs > 0.025) { //https://sci-hub.se/10.1109/tencon.2017.8227906
-  //      vel = vel + a_abs * 9.8 * G_Dt;
-  //      float pos_a = pos;
-  //      pos = pos + vel + a_abs * 9.8 * ((G_Dt * G_Dt) * 0.5);//Vector de posicion medido con el IMU
-  //    } else {
-  //      vel = 0;
-  //    }
+  if (a_abs > 0.4) { //https://sci-hub.se/10.1109/tencon.2017.8227906
+    vel = vel_0 + (a_abs * G_Dt);
+    pos = pos_0 + vel_0 * G_Dt + ((G_Dt * G_Dt) * 0.5 * a_abs); //Vector de posicion medido con el IMU
+    vel_0 = vel;
+    pos_0 = pos;
+  } else {
+    vel = 0;
+  }
 
   K.F = {1.0,  0.0,
          0.0,  G_Dt
@@ -224,7 +221,7 @@ void loop() {
   Serial.print(a_y, 3); Serial.print(F(",")); Serial.print(a_y_p, 3);  Serial.print(F(",")); Serial.print(a_y_d, 3); Serial.print(F(","));
   Serial.print(roll); Serial.print(F(","));
 
-  Serial.print(a_abs); Serial.print(F(",")); Serial.print(pos);  Serial.print(F(",")); Serial.print(vel); Serial.print(F(","));
+  Serial.print(a_abs, 4); Serial.print(F(",")); Serial.print(pos);  Serial.print(F(",")); Serial.print(vel); Serial.print(F(","));
   Serial.print(yaw); Serial.print(F(","));  Serial.print(G_Dt, 4); Serial.print(F(","));
 
   Serial.print(latt, 6); Serial.print(F(",")); Serial.print(longi, 6);  Serial.print(F(",")); Serial.print(ned[0]); Serial.print(F(","));
