@@ -155,13 +155,13 @@ void loop() {
   pitch = ((float)JY901.getPitch());
   yaw = ((float)JY901.getYaw());
 
-  float a_x_p = ((8.238905 * pow(10, -7)) * (pitch * pitch * pitch)) + ((9.846454 * pow(10, -6)) * (pitch * pitch)) - (0.017688 * pitch) + 0.003106;
+  float a_x_p = ((8.238905 * pow(10, -7)) * (pitch * pitch * pitch)) + ((9.846454 * pow(10, -6)) * (pitch * pitch)) - (0.017688 * pitch);
   float a_x_d = (a_x - 0.003106 ) - a_x_p;
   float a_x_dx = a_x_d * cos(ToRad(pitch));
   float a_x_dy = a_x_d * sin(ToRad(pitch));
 
 
-  float a_y_p = ((-8.026296 * pow(10, -7)) * (roll * roll * roll)) - ((1.018808 * pow(10, -6)) * (roll * roll)) + (0.017629 * roll) + 0.000581;
+  float a_y_p = ((-8.026296 * pow(10, -7)) * (roll * roll * roll)) - ((1.018808 * pow(10, -6)) * (roll * roll)) + (0.017629 * roll);
   float a_y_d =  (a_y - 0.000581) - a_y_p;
   float a_y_dx = a_y_d * cos(ToRad(roll));
   float a_y_dy = a_y_d * sin(ToRad(roll));
