@@ -6,7 +6,9 @@ char valor;
 String estado;
 
 int a = 1500;
-float b = 1;
+//float b = 1;
+//float b = 1.1219952;
+float b = 1.02;
 
 int min_esc = 1000;
 int max_esc = 2000;
@@ -20,14 +22,14 @@ boolean newData = false;
 
 void setup()
 {
-  esc1.attach(6, min_esc, max_esc);// motor izquierdo m1 al pin 5
-  esc2.attach(7, min_esc, max_esc); // motor derecho m2 al pin 9
+  esc1.attach(6, min_esc, max_esc);// motor izquierdo m1 al pin 6
+  esc2.attach(7, min_esc, max_esc); // motor derecho m2 al pin 7
   esc1.writeMicroseconds(0);
   esc2.writeMicroseconds(0);
   Serial.begin(9600);   // Inicializamos  el puerto serie
   Serial1.begin(9600);   // Inicializamos  el puerto serie
   Serial2.begin(9600);   // Inicializamos  el puerto serie
-  
+
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
 }
@@ -35,7 +37,6 @@ void setup()
 void loop()
 {
   dataBT();
- 
 
   if (start_save) {
     recvWithStartEndMarkers();
@@ -44,7 +45,7 @@ void loop()
   } else {
     digitalWrite(LED_BUILTIN, LOW);
   }
-  
+
 }
 
 
@@ -57,21 +58,21 @@ void dataBT () {
         m12();
         break;
       case 'a':
-        move_usv(a * b, a);
+        move_usv(round(a * b), a);
         Serial.println("Adelante");
         break;
       case 'b':
-        move_usv(0, a);
-        Serial.println("Izquierda"); //prende motor derecho pin 9
+        move_usv(0, round(a * b));
+        Serial.println("Izquierda"); //prende motor derecho
 
         break;
       case 'c':
-        move_usv(a * b, 0);
-        Serial.println("Derecha"); //prende motor izquierdo pin 9
+        move_usv(a, 0);
+        Serial.println("Derecha"); //prende motor izquierdo
         break;
       case 'd':
         parar();
-        Serial.println("Parar"); //prende motor izquierdo pin 9
+        Serial.println("Parar");
         break;
 
       case 'T':
@@ -82,6 +83,21 @@ void dataBT () {
         start_save = true;
         break;
 
+      case 'q':
+        circulo(); //Prueba circular
+        Serial.println("Circulo");
+        break;
+
+      case 'w':
+       zigzag(a, round(a*b)); //ZigZag
+       Serial.println("ZigZag");
+        break;
+
+      case 'e':
+        cuadrado(); // Prueba rectángular
+        Serial.println("Cuadrado");
+        break;
+
     }
 
   }
@@ -89,15 +105,15 @@ void dataBT () {
 }
 
 
-void m12() { //mover motores al valor que llegue por bt
+void m12() { //mover motores al valor que llegue por bt para diferentes PWM
   delay (10);
   while (Serial2.available()) {
     char c = Serial2.read();
     estado += c;
   }
   if (estado.length() > 0) {
-    esc1.writeMicroseconds(estado.toInt() * b); //motor izquierdo (debe conectarse al 5)
-    esc2.writeMicroseconds((estado.toInt())); //motor derecho (debe conectarse al 9)
+    esc1.writeMicroseconds(estado.toInt()); //motor izquierdo
+    esc2.writeMicroseconds((round(estado.toInt()*b))); //motor derecho
     Serial.println(estado.toInt());
     Serial.println(estado.toInt() * b);
     estado = "";
@@ -113,6 +129,40 @@ void parar() {
 void move_usv(int m1, int m2) {
   esc1.writeMicroseconds(m1);
   esc2.writeMicroseconds(m2);
+}
+
+
+void zigzag(int m1, int m2) {
+
+  for (int i = 0; i <=2 ; i++) {
+    esc1.writeMicroseconds(1500);
+    esc2.writeMicroseconds(round(1300));
+    delay (2000);
+    esc1.writeMicroseconds(round (1300));
+    esc2.writeMicroseconds(1500);
+    delay (2000);
+  }
+  parar();
+}
+
+void circulo() {
+  esc1.writeMicroseconds(2000);
+  esc2.writeMicroseconds(0);
+  delay(5000);
+   parar();
+}
+
+
+void cuadrado() {
+  for (int i = 0; i <= 4; i++) {
+    esc1.writeMicroseconds(a);
+    esc2.writeMicroseconds(round (a*b));
+    delay (1000);
+    esc1.writeMicroseconds(2000);
+    esc2.writeMicroseconds(0);
+    delay (3000);
+  }
+   parar();
 }
 
 

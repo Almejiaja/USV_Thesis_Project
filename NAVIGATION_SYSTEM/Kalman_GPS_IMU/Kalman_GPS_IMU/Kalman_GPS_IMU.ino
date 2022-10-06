@@ -43,7 +43,7 @@ using namespace BLA;
 #define m2 0.03
 
 #define r_a  6378137.0 //IERS  WGS-84 ellipsoid, semi-major axis (a) 6378137.0
-#define r_b  6356752.3142 //IERS  WGS-84 ellipsoid, semi-minor axis (b) 6356752.3142
+#define r_b   //IERS  WGS-84 ellipsoid, semi-minor axis (b) 6356752.3142
 #define e ((1 / 298.257223563) * (2 - (1 / 298.257223563))) // WGS-84 [Transforming Cartesian coordinates X,Y,Z to Geographical coordinates φ, λ, h]
 
 KALMAN<Nstate, Nobs, Ncom> K; // your Kalman filter
@@ -63,9 +63,13 @@ float a_x, a_y, a_z, yaw, pitch, roll, a_abs, pos, vel, vel_0, pos_0;
 float latt, longi, alt, vel_gps;
 //Coordenada LLT inicial
 
-float la_o = 6.236123;
-float lo_o = -75.547935;
-float alt_o = 1656;
+float la_o = 6.235980;
+float lo_o = -75.547790;
+float alt_o = 1660;
+
+//float la_o = 6.245662;
+//float lo_o = -75.549241;
+//float alt_o = 1620;
 
 float ecef_a[3]; //coordenadas X, Y y Z de la posición actual
 float ecef_o[3]; //coordenadas X, Y y Z de la posición inicial
@@ -76,12 +80,22 @@ long timer_old;
 float G_Dt; // delay between two updates of the filter
 
 
+boolean location_flag = false;
+boolean altitud_flag = false;
+
+File myFile;
 
 void setup() {
 
   Serial.begin(9600);
   ss.begin(GPSBaud);
   JY901.attach(Serial);
+
+//  Serial.print("Iniciando SD ...");
+//  if (!SD.begin(10)) {
+//    Serial.println("No se pudo inicializar");
+//    return;
+//  }
 
   //  for (int i = 0; i < 5000; i++) // We take some readings...
   //  {
@@ -121,11 +135,12 @@ void setup() {
         };
 
   delay(5000);
-  timer = millis();
+  timer = 0;
 
 }
 
 void loop() {
+
 
   timer_old = timer;
   timer = millis();
@@ -134,11 +149,11 @@ void loop() {
   {
     G_Dt = (timer - timer_old) / 1000.0; // Real time of loop run. We use this on the DCM algorithm (gyro integration time)
 
-    if (G_Dt > 0.2)
-      G_Dt = 0; // ignore integration times over 100 ms
-  }
-  else {
-    G_Dt = 0;
+    //    if (G_Dt > 0.2)
+    //      G_Dt = 0; // ignore integration times over 100 ms
+    //  }
+    //  else {
+    //    G_Dt = 0;
   }
 
   JY901.receiveSerialData();
@@ -156,14 +171,14 @@ void loop() {
   pitch = ((float)JY901.getPitch());
   yaw = ((float)JY901.getYaw());
 
-  float a_x_p = ((8.238905 * pow(10, -7)) * (pitch * pitch * pitch)) + ((9.846454 * pow(10, -6)) * (pitch * pitch)) - (0.017688 * pitch);
-  float a_x_d = (a_x - 0.003106 ) - a_x_p;
+  float a_x_p = ((8.238905 * pow(10, -7)) * (pitch * pitch * pitch)) + ((9.846454 * pow(10, -6)) * (pitch * pitch)) - (0.017688 * pitch) - 0.003106;
+  float a_x_d = (a_x - a_x_p) - 0.0041; //0.0041 ruido a_x_d
   float a_x_dx = a_x_d * cos(ToRad(pitch));
   float a_x_dy = a_x_d * sin(ToRad(pitch));
 
 
-  float a_y_p = ((-8.026296 * pow(10, -7)) * (roll * roll * roll)) - ((1.018808 * pow(10, -6)) * (roll * roll)) + (0.017629 * roll);
-  float a_y_d =  (a_y - 0.000581) - a_y_p;
+  float a_y_p = ((-8.026296 * pow(10, -7)) * (roll * roll * roll)) - ((1.018808 * pow(10, -6)) * (roll * roll)) + (0.017629 * roll) + 0.000581;
+  float a_y_d =  (a_y - a_y_p) - (-0.0011); //-0.0011 ruido a_y_d
   float a_y_dx = a_y_d * cos(ToRad(roll));
   float a_y_dy = a_y_d * sin(ToRad(roll));
 
@@ -173,15 +188,15 @@ void loop() {
   a_abs = sqrt(a_x_d * a_x_d + a_y_d * a_y_d);
   a_abs = a_abs * 9.8;
 
-
-  if (a_abs > 0.4) { //https://sci-hub.se/10.1109/tencon.2017.8227906
-    vel = vel_0 + (a_abs * G_Dt);
-    pos = pos_0 + vel_0 * G_Dt + ((G_Dt * G_Dt) * 0.5 * a_abs); //Vector de posicion medido con el IMU
-    vel_0 = vel;
-    pos_0 = pos;
-  } else {
-    vel = 0;
-  }
+  //  if (a_abs > 0.2) { //https://sci-hub.se/10.1109/tencon.2017.8227906
+  //    vel = vel_0 + (a_abs * G_Dt);
+  //    pos = pos_0 + vel_0 * G_Dt + ((G_Dt * G_Dt) * 0.5 * a_abs); //Vector de posicion medido con el IMU
+  //    vel_0 = vel;
+  //    pos_0 = pos;
+  //  }else{
+  //    pos=pos_0;
+  //    vel=vel_0;
+  //    }
 
   K.F = {1.0,  0.0,
          0.0,  G_Dt
@@ -192,10 +207,6 @@ void loop() {
         };
 
 
-  K.update(obs);
-
-  ss.listen();
-
   while (ss.available() > 0) {
 
     if (gps.encode(ss.read())) {
@@ -204,6 +215,10 @@ void loop() {
       longi = validGPS(gps.location.lng(), gps.location.isValid());
       alt = validGPS(gps.altitude.meters(), gps.altitude.isValid());
       vel_gps = validGPS(gps.speed.mps(), gps.speed.isValid());
+
+      location_flag = gps.location.isValid();
+      altitud_flag = gps.altitude.isValid();
+
       llt2ecef(ecef_a, latt, longi, alt);
       llt2ecef(ecef_o, la_o, lo_o, alt_o);
       ecef2ned(la_o, lo_o, ecef_o[0], ecef_o[1], ecef_o[2], ecef_a[0], ecef_a[1], ecef_a[2]);
@@ -213,55 +228,83 @@ void loop() {
     }
   }
 
-  Serial.print('<');
-
-  Serial.print(a_x, 3); Serial.print(F(",")); Serial.print(a_x_p, 3);  Serial.print(F(",")); Serial.print(a_x_d, 3); Serial.print(F(","));
-  Serial.print(pitch); Serial.print(F(","));
-
-  Serial.print(a_y, 3); Serial.print(F(",")); Serial.print(a_y_p, 3);  Serial.print(F(",")); Serial.print(a_y_d, 3); Serial.print(F(","));
-  Serial.print(roll); Serial.print(F(","));
-
-  Serial.print(a_abs, 4); Serial.print(F(",")); Serial.print(pos);  Serial.print(F(",")); Serial.print(vel); Serial.print(F(","));
-  Serial.print(yaw); Serial.print(F(","));  Serial.print(G_Dt, 4); Serial.print(F(","));
-
-  Serial.print(latt, 6); Serial.print(F(",")); Serial.print(longi, 6);  Serial.print(F(",")); Serial.print(ned[0]); Serial.print(F(","));
-  Serial.print(ned[1]); Serial.print(F(",")); Serial.print(obs(0)); Serial.print(F(",")); Serial.print(obs(1));
-  Serial.print(F(",")); Serial.print(K.x(0)); Serial.print(F(",")); Serial.print(K.x(1));
-
-  Serial.println('>');
-
-
-}
-
-void llt2ecef(float * ecef, float lattitud, float longitud, float high) {
-  lattitud = ToRad(lattitud);
-  longitud = ToRad(longitud);
-  float vn = r_a / sqrt(1 - e * (sin(lattitud) * sin(lattitud))); //Elipsoide
-  ecef[0] = (vn + high) * cos(lattitud) * cos(longitud);
-  ecef[1] = (vn + high) * cos(lattitud) * sin(longitud);
-  ecef[2] = (vn * (1 - (e * e)) + high) * sin(lattitud);
-
-}
-
-void ecef2ned(float la1, float lo1, float x1, float y1, float z1, float x2, float y2, float z2) { //Combining High Rate GPS and Strong Motion Data: A Kalman Filter Formulation for Real-Time Displacement Waveforms
-  la1 = ToRad(la1);
-  lo1 = ToRad(lo1);
-  float d_x = x2 - x1;
-  float d_y = y2 - y1;
-  float d_z = z2 - z1;
-  ned[0] = (-sin(la1) * cos(lo1) * d_x) + (- sin(lo1) * sin(la1) * d_y) + (cos(la1) * d_z); //Norte (y)
-  ned[1] = (-sin(lo1) * d_x) + (cos(lo1) * d_y); // Este (x)
-  ned[2] = (cos(la1) * cos(lo1) * d_x) + (cos(la1) * sin(lo1) * d_y) + (sin(la1) * d_z); //Down
-}
-
-float validGPS(float val, bool valid)
-{
-  if (valid)
-  {
-    return  val;
+  if (location_flag & altitud_flag) {
+    K.update(obs);
   }
-  else
-  {
-    return  0;
-  }
+  
+    Serial.print('<'); Serial.print(F(","));
+
+    Serial.print(a_x, 3); Serial.print(F(",")); Serial.print(a_x_p, 3);  Serial.print(F(",")); Serial.print(a_x_d, 3); Serial.print(F(","));
+    Serial.print(a_y, 3); Serial.print(F(",")); Serial.print(a_y_p, 3);  Serial.print(F(",")); Serial.print(a_y_d, 3); Serial.print(F(","));
+    //
+    Serial.print(pitch); Serial.print(F(","));   Serial.print(roll); Serial.print(F(",")); Serial.print(yaw); Serial.print(F(","));
+    //
+    Serial.print(latt, 6); Serial.print(F(",")); Serial.print(longi, 6);  Serial.print(F(",")); Serial.print(alt);
+    Serial.print(F(",")); Serial.print(ned[0]); Serial.print(F(","));  Serial.print(ned[1]); Serial.print(F(","));
+    Serial.print(obs(0)); Serial.print(F(",")); Serial.print(obs(1));
+    Serial.print(F(",")); Serial.print(K.x(0)); Serial.print(F(",")); Serial.print(K.x(1)); Serial.print(F(","));
+
+    Serial.print(a_abs, 3); Serial.print(F(",")); Serial.print(G_Dt, 3); Serial.print(F(","));
+
+    Serial.println('>');
+
+    delay(50);
 }
+//
+//  myFile = SD.open("datalog.txt", FILE_WRITE);//abrimos  el archivo
+//
+//  if (myFile) {
+//    myFile.print(a_x, 3); myFile.print(F(",")); myFile.print(a_x_p, 3);  myFile.print(F(",")); myFile.print(a_x_d, 3); myFile.print(F(","));
+//    myFile.print(a_y, 3); myFile.print(F(",")); myFile.print(a_y_p, 3);  myFile.print(F(",")); myFile.print(a_y_d, 3); myFile.print(F(","));
+//    //
+//    myFile.print(pitch); myFile.print(F(","));   myFile.print(roll); myFile.print(F(",")); myFile.print(yaw); myFile.print(F(","));
+//    //
+//    myFile.print(latt, 6); myFile.print(F(",")); myFile.print(longi, 6);  myFile.print(F(",")); myFile.print(alt);
+//    myFile.print(F(",")); myFile.print(ned[0]); myFile.print(F(","));  myFile.print(ned[1]); myFile.print(F(","));
+//    myFile.print(obs(0)); myFile.print(F(",")); myFile.print(obs(1));
+//    myFile.print(F(",")); myFile.print(K.x(0)); myFile.print(F(",")); myFile.print(K.x(1)); myFile.print(F(","));
+//
+//    myFile.print(a_abs, 3); myFile.print(F(",")); myFile.print(G_Dt, 3); myFile.print(F(","));
+//
+//    myFile.close(); //cerramos el archivo
+//  
+//
+//
+//  }
+
+
+
+    
+  void llt2ecef(float * ecef, float lattitud, float longitud, float high) {
+    lattitud = ToRad(lattitud);
+    longitud = ToRad(longitud);
+    float vn = r_a / sqrt(1 - e * (sin(lattitud) * sin(lattitud))); //Elipsoide
+    ecef[0] = (vn + high) * cos(lattitud) * cos(longitud);
+    ecef[1] = (vn + high) * cos(lattitud) * sin(longitud);
+    ecef[2] = (vn * (1 - (e * e)) + high) * sin(lattitud);
+
+  }
+
+  void ecef2ned(float la1, float lo1, float x1, float y1, float z1, float x2, float y2, float z2) { //Combining High Rate GPS and Strong Motion Data: A Kalman Filter Formulation for Real-Time Displacement Waveforms
+    la1 = ToRad(la1);
+    lo1 = ToRad(lo1);
+    float d_x = x2 - x1;
+    float d_y = y2 - y1;
+    float d_z = z2 - z1;
+    ned[0] = (-sin(la1) * cos(lo1) * d_x) + (- sin(lo1) * sin(la1) * d_y) + (cos(la1) * d_z); //Norte (y)
+    ned[1] = (-sin(lo1) * d_x) + (cos(lo1) * d_y); // Este (x)
+    ned[2] = (cos(la1) * cos(lo1) * d_x) + (cos(la1) * sin(lo1) * d_y) + (sin(la1) * d_z); //Down
+  }
+
+  float validGPS(float val, bool valid)
+  {
+    if (valid)
+    {
+      return  val;
+
+    }
+    else
+    {
+      return  0;
+    }
+  }
