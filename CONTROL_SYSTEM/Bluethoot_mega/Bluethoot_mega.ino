@@ -1,13 +1,18 @@
 #include <Servo.h>
+#include <ArduinoJson.h>
 
+#define PI 3.1415926535897932384626433832795
+
+//Control LQR
+
+float km11 = -1.3068, km12 = -2.2361, km21 = 1.3068, km22 = 2.2361, e, e1 = 0, u1, u2, u1_1, u2_1, m1, m2; //Parámetros LQR Matlab
+
+// PWM motores
 Servo esc1, esc2;
-
 char valor;
 String estado;
 
 int a = 1500;
-//float b = 1;
-//float b = 1.1219952;
 float b = 1.02;
 
 int min_esc = 1000;
@@ -19,6 +24,8 @@ char receivedChars[numChars];   // an array to store the received data
 boolean start_save = false;
 boolean newData = false;
 
+char *strings[10]; // an array of pointers to the pieces of the above array after strtok()
+char *ptr = NULL;
 
 void setup()
 {
@@ -38,14 +45,60 @@ void loop()
 {
   dataBT();
 
+  if (Serial1.available())
+  {
+    // Allocate the JSON document
+    // This one must be bigger than the sender's because it must store the strings
+    StaticJsonDocument<300> doc;
+
+    // Read the JSON document from the "link" serial port
+    DeserializationError err = deserializeJson(doc, Serial1);
+
+    if (err == DeserializationError::Ok)
+    {
+
+      LQR_control(doc["yaw_d"].as<float>(), doc["yaw_t"].as<float>());
+      // Print the values
+      // (we must use as<T>() to resolve the ambiguity)
+      //      Serial.print("yaw_d = ");
+      //      Serial.println(doc["dt"].as<float>());
+      //      Serial.print("yaw_t = ");
+      //      Serial.println(doc["yaw_t"].as<float>());
+
+      Serial.print("m1 = ");
+      Serial.print(m1);Serial.print(" , ");
+      Serial.print("m2 = ");
+      Serial.print(m2);Serial.print(" , ");
+
+      Serial.print("yaw_d = ");
+      Serial.print(doc["yaw_d"].as<float>()); Serial.print(" , ");
+      Serial.print("yaw_t = ");
+      Serial.println(doc["yaw_t"].as<float>());
+    }
+    else
+    {
+      // Print error to the "debug" serial port
+      Serial.print("deserializeJson() returned ");
+      Serial.println(err.c_str());
+
+      // Flush all bytes in the "link" serial port buffer
+      while (Serial1.available() > 0)
+        Serial1.read();
+    }
+  }
+
+
+  //  recvWithStartEndMarkers();
+  //  showNewData();
+
   if (start_save) {
-    recvWithStartEndMarkers();
-    showNewData();
+    //      recvWithStartEndMarkers();
+    //      showNewData();
     digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
   } else {
     digitalWrite(LED_BUILTIN, LOW);
   }
-
+  //delay(20);
 }
 
 
@@ -89,8 +142,8 @@ void dataBT () {
         break;
 
       case 'w':
-       zigzag(a, round(a*b)); //ZigZag
-       Serial.println("ZigZag");
+        zigzag(a, round(a * b)); //ZigZag
+        Serial.println("ZigZag");
         break;
 
       case 'e':
@@ -134,7 +187,7 @@ void move_usv(int m1, int m2) {
 
 void zigzag(int m1, int m2) {
 
-  for (int i = 0; i <=2 ; i++) {
+  for (int i = 0; i <= 2 ; i++) {
     esc1.writeMicroseconds(1500);
     esc2.writeMicroseconds(round(1300));
     delay (2000);
@@ -149,20 +202,20 @@ void circulo() {
   esc1.writeMicroseconds(2000);
   esc2.writeMicroseconds(0);
   delay(5000);
-   parar();
+  parar();
 }
 
 
 void cuadrado() {
   for (int i = 0; i <= 4; i++) {
     esc1.writeMicroseconds(a);
-    esc2.writeMicroseconds(round (a*b));
+    esc2.writeMicroseconds(round (a * b));
     delay (1000);
     esc1.writeMicroseconds(2000);
     esc2.writeMicroseconds(0);
     delay (3000);
   }
-   parar();
+  parar();
 }
 
 
@@ -175,7 +228,6 @@ void recvWithStartEndMarkers() {
 
   while (Serial1.available() > 0 && newData == false) {
     rc = Serial1.read();
-
     if (recvInProgress == true) {
       if (rc != endMarker) {
         receivedChars[ndx] = rc;
@@ -183,6 +235,7 @@ void recvWithStartEndMarkers() {
         if (ndx >= numChars) {
           ndx = numChars - 1;
         }
+        Serial.println(receivedChars);
       }
       else {
         receivedChars[ndx] = '\0'; // terminate the string
@@ -191,7 +244,6 @@ void recvWithStartEndMarkers() {
         newData = true;
       }
     }
-
     else if (rc == startMarker) {
       recvInProgress = true;
     }
@@ -200,7 +252,41 @@ void recvWithStartEndMarkers() {
 
 void showNewData() {
   if (newData == true) {
-    Serial.println(receivedChars);
+    //Serial.println(receivedChars);
     newData = false;
   }
+}
+
+void LQR_control(float yaw_d, float yaw_t) {
+  e = yaw_d - yaw_t;
+
+  u1 = km11 * (e - e1) + km12 * (e - e1) + u1_1;
+  u2 = km21 * (e - e1) + km22 * (e - e1) + u2_1;
+
+
+
+  u1_1 = u1;
+  u2_1 = u2;
+  e1 = e;
+  m1 = 139 * u1 + 1057.1; //PWM motor 1
+  m2 = 139 * u2 + 1057.1; //PWM motor 2
+
+  //  if (u1 < 0) {
+  //    m1 = 0;
+  //  }
+  //
+  //  if (u2 < 0) {
+  //    m2 = 0;
+  //  }
+  //
+  //  if (u1 > 5) {
+  //    m1 = 1752;
+  //  }
+  //
+  //  if (u2 > 5) {
+  //    m2 = 1752;
+  //  }
+
+
+
 }
