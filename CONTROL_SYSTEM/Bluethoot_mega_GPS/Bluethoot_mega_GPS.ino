@@ -109,7 +109,7 @@ void loop()
       input_rasp = "";
     }
     update_evasion(input_rasp);
-    
+
     while (Serial3.available() > 0) {
       if (gps.encode(Serial3.read())) {
         latt = validGPS(gps.location.lat(), gps.location.isValid());
@@ -138,8 +138,13 @@ void loop()
     DeserializationError err = deserializeJson(doc, Serial1);
     if (err == DeserializationError::Ok)
     {
-      LQR_control(yaw_d, doc["yaw_t"].as<float>());
-      
+      float yaw_t = doc["yaw_t"].as<float>();
+      if (abs(yaw_d - yaw_t) > 0.052) { //Si la diferencia de angulos es mayor a 3° corregir rumbo
+        LQR_control(yaw_d, yaw_t);
+      } else {
+        move_usv(1500, 1500);
+      }
+
       Serial.print(sat); Serial.print(" , ");
       Serial.print(h_dop, 4); Serial.print(" , ");
       Serial.print(ned_a[0]); Serial.print(" , ");
@@ -324,8 +329,8 @@ void evasion() {
   delay (2000);
 }
 
-void LQR_control(float yaw_d, float yaw_t) {
-  e = yaw_d - yaw_t;
+void LQR_control(float y_d, float y_t) {
+  e = y_d - y_t;
 
   u1 = km11 * (e - e1) + km12 * (e - e1) + u1_1;
   u2 = km21 * (e - e1) + km22 * (e - e1) + u2_1;
