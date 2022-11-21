@@ -15,10 +15,11 @@ TinyGPSPlus gps;
 #define b_r  6356752.3142 //IERS  WGS-84 ellipsoid, semi-minor axis (b) 6356752.3142
 #define e_g ((1 / 298.257223563) * (2 - (1 / 298.257223563))) // WGS-84 [Transforming Cartesian coordinates X,Y,Z to Geographical coordinates φ, λ, h]
 
-float latt, longi, alt, vel_gps;
+float latt, latt_a, longi, longi_a, alt, vel_gps, h_dop;
 float xd = 0, ds, xp;
 
-
+double cour;
+int sat;
 //Coordenada ruta inicial
 
 float la_o = 6.186987;
@@ -42,7 +43,7 @@ float ned_a[3]; //Posición NED GPS de la posición actual
 float ned_o[3]; //Posición NED GPS de la posición inicial
 float ned_f[3]; //Posición NED GPS de la posición final
 
-float yaw_d, Rp = 8;
+float yaw_d, Rp = 4;
 //------------------------------------
 /****       CONTROL LQR    ****/
 //------------------------------------
@@ -75,6 +76,13 @@ boolean newData = false;
 char *strings[10]; // an array of pointers to the pieces of the above array after strtok()
 char *ptr = NULL;
 
+//------------------------------------
+/****       COMUNICATION SERIAL    ****/
+//------------------------------------
+
+String input_rasp, control_mov_1, control_mov_2, control_mov_3;
+
+
 void setup()
 {
   esc1.attach(6, min_esc, max_esc);// motor izquierdo m1 al pin 6
@@ -85,7 +93,6 @@ void setup()
   Serial1.begin(9600);   // Inicializamos  el puerto serie NANO
   Serial2.begin(9600);   // Inicializamos  el puerto serie BLT
   Serial3.begin(9600);   // Inicializamos  el puerto serie GPS
-
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
 }
@@ -95,13 +102,24 @@ void loop()
   dataBT();
   if (Serial1.available())
   {
-
+    if (Serial.available())
+    {
+      input_rasp = Serial.readString();
+    } else {
+      input_rasp = "";
+    }
+    update_evasion(input_rasp);
+    
     while (Serial3.available() > 0) {
       if (gps.encode(Serial3.read())) {
         latt = validGPS(gps.location.lat(), gps.location.isValid());
         longi = validGPS(gps.location.lng(), gps.location.isValid());
         alt = validGPS(gps.altitude.meters(), gps.altitude.isValid());
         vel_gps = validGPS(gps.speed.mps(), gps.speed.isValid());
+        //cour = validGPS(gps.course.deg(), gps.course.isValid());
+        cour = gps.courseTo(latt, longi, la_f, lo_f);
+        sat = validGPS(gps.satellites.value(), gps.satellites.isValid());
+        h_dop = validGPS(gps.hdop.hdop(), gps.hdop.isValid());
         llt2ecef(ecef_a, latt, longi, alt); //Coordenadas XYZ de posición actual
         llt2ecef(ecef_o, la_o, lo_o, alt_o); //Coordenadas XYZ de posición inicial
         llt2ecef(ecef_f, la_f, lo_f, alt_f); //Coordenadas XYZ de posición final
@@ -110,44 +128,53 @@ void loop()
         ecef2ned(ned_f, la_o, lo_o, ecef_o[0], ecef_o[1], ecef_o[2], ecef_f[0], ecef_f[1], ecef_f[2]);
         yaw_d = LOS(ned_o, ned_f, ned_a, Rp);
         //Serial.println(yaw_d);
+
       }
     }
     // Allocate the JSON document
     // This one must be bigger than the sender's because it must store the strings
-    StaticJsonDocument<300> doc;
+    StaticJsonDocument<200> doc;
     // Read the JSON document from the "link" serial port
     DeserializationError err = deserializeJson(doc, Serial1);
     if (err == DeserializationError::Ok)
     {
       LQR_control(yaw_d, doc["yaw_t"].as<float>());
-      Serial.print("m1 = ");
-      Serial.print(m1); Serial.print(" , ");
-      Serial.print("m2 = ");
-      Serial.print(m2); Serial.print(" , ");
-      Serial.print("yaw_t = ");
-      Serial.print(doc["yaw_t"].as<float>()); Serial.print(" , ");
-      Serial.print("yaw_d = ");
-      Serial.print(yaw_d); Serial.print(" , ");
-      Serial.print("ds = ");
+      
+      Serial.print(sat); Serial.print(" , ");
+      Serial.print(h_dop, 4); Serial.print(" , ");
+      Serial.print(ned_a[0]); Serial.print(" , ");
+      // Serial.print("ned_a[1]= ");
+      Serial.print(ned_a[1]); Serial.print(" , ");
+      //Serial.print("ned_f[0] = ");
+      Serial.print(ned_f[0]); Serial.print(" , ");
+      //Serial.print("ned_f[1]= ");
+      Serial.print(ned_f[1]); Serial.print(" , ");
+      Serial.print(input_rasp); Serial.print(" , ");
+      //Serial.print("ang= ");
+      //      Serial.print(cour); Serial.print(" , ");
+      //      Serial.print(ang, 4); Serial.print(" , ");
+      //      //Serial.print("yaw_t = ");
+      Serial.print(doc["yaw_t"].as<float>(), 4); Serial.print(" , ");
+      //Serial.print("yaw_d = ");
+      Serial.print(yaw_d, 4); Serial.print(" , ");
+      //Serial.print("ds = ");
       Serial.print(ds); Serial.print(" , ");
-      Serial.print("xp = ");
+      //Serial.print("xp = ");
       Serial.println(xp);
     }
     else
     {
       // Print error to the "debug" serial port
-      //      Serial.print("deserializeJson() returned ");
-      //      Serial.println(err.c_str());
+      Serial.print("deserializeJson() returned ");
+      Serial.println(err.c_str());
 
       // Flush all bytes in the "link" serial port buffer
       while (Serial1.available() > 0)
         Serial1.read();
     }
-    delay(20);
+    //delay(500);
 
   }
-
-
 
 
   if (start_save) {
@@ -208,13 +235,9 @@ void dataBT () {
         cuadrado(); // Prueba rectángular
         Serial.println("Cuadrado");
         break;
-
     }
-
   }
-
 }
-
 
 void m12() { //mover motores al valor que llegue por bt para diferentes PWM
   delay (10);
@@ -276,6 +299,30 @@ void cuadrado() {
   parar();
 }
 
+
+void update_evasion(String input)
+{
+  if (input == "a") {
+    evasion();
+  } else if (input == "b") {
+    parar();
+  }
+}
+
+void evasion() {
+  esc1.writeMicroseconds(1500);
+  esc2.writeMicroseconds(0);
+  delay (1000);
+  esc1.writeMicroseconds(1500);
+  esc2.writeMicroseconds(1500);
+  delay (2000);
+  esc1.writeMicroseconds(0);
+  esc2.writeMicroseconds(1500);
+  delay (1000);
+  esc1.writeMicroseconds(1500);
+  esc2.writeMicroseconds(1500);
+  delay (2000);
+}
 
 void LQR_control(float yaw_d, float yaw_t) {
   e = yaw_d - yaw_t;
