@@ -37,18 +37,17 @@ void setup() {
   JY901.attach(Serial);
   timer = 0;
 
-
 }
 
 void loop() {
 
-  timer_old = timer;
-  timer = millis();
-
-  if (timer > timer_old)
-  {
-    G_Dt = (timer - timer_old) / 1000.0; // Real time of loop run. We use this on the DCM algorithm (gyro integration time)
-  }
+  //  timer_old = timer;
+  //  timer = millis();
+  //
+  //  if (timer > timer_old)
+  //  {
+  //    G_Dt = (timer - timer_old) / 1000.0; // Real time of loop run. We use this on the DCM algorithm (gyro integration time)
+  //  }
 
   JY901.receiveSerialData();
   a_x = ((float)JY901.getAccX());
@@ -73,17 +72,18 @@ void loop() {
   //  a_abs = a_abs * 9.8;
 
 
-  StaticJsonDocument<200> doc;
-  doc["yaw_t"] = yaw;
-  doc["yaw_y"] = yaw_y;
-  doc["roll"] = roll;
-  doc["pitch"] = pitch;
-  doc["ax"] = a_x_d;
-  doc["ay"] = a_y_d;
-  doc["az"] = a_z;
+  //  StaticJsonDocument<200> doc;
+  //  doc["yaw_t"] = yaw;
+  //  doc["yaw_y"] = yaw_y;
+  //  doc["roll"] = roll;
+  //  doc["pitch"] = pitch;
+  //  doc["ax"] = a_x_d;
+  //  doc["ay"] = a_y_d;
+  //  doc["az"] = a_z;
+  //
+  //  serializeJson(doc, ss);
 
-  serializeJson(doc, ss);
-
+  ss.print(yaw);ss.print('\n');
 
   Serial.print(yaw); Serial.print(" , ");
   Serial.print( yaw_y); Serial.print(" , ");
@@ -92,7 +92,8 @@ void loop() {
   Serial.print(a_x_d, 4); Serial.print(" , ");
   Serial.print(a_y_d, 4); Serial.print(" , ");
   Serial.println(a_z, 4);
-  delay(100);
+
+  delay(50);
 
   //  Serial.println('<');// Serial.print(F(","));
   //  Serial.print(yaw); Serial.print(F(","));  Serial.print(yaw_d); Serial.print(F(" "));Serial.println('>');

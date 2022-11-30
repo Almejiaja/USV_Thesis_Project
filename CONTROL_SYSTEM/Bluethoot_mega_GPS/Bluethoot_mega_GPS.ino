@@ -15,7 +15,7 @@ TinyGPSPlus gps;
 #define b_r  6356752.3142 //IERS  WGS-84 ellipsoid, semi-minor axis (b) 6356752.3142
 #define e_g ((1 / 298.257223563) * (2 - (1 / 298.257223563))) // WGS-84 [Transforming Cartesian coordinates X,Y,Z to Geographical coordinates φ, λ, h]
 
-float latt, latt_a, longi, longi_a, alt, vel_gps, h_dop;
+float latt, latt_a, longi, longi_a, alt, vel_gps, h_dop, dist_final;
 float xd = 0, ds, xp;
 
 double cour;
@@ -108,18 +108,20 @@ void loop()
     } else {
       input_rasp = "";
     }
+    
     update_evasion(input_rasp);
 
     while (Serial3.available() > 0) {
+      
       if (gps.encode(Serial3.read())) {
         latt = validGPS(gps.location.lat(), gps.location.isValid());
         longi = validGPS(gps.location.lng(), gps.location.isValid());
         alt = validGPS(gps.altitude.meters(), gps.altitude.isValid());
         vel_gps = validGPS(gps.speed.mps(), gps.speed.isValid());
-        //cour = validGPS(gps.course.deg(), gps.course.isValid());
         cour = gps.courseTo(latt, longi, la_f, lo_f);
         sat = validGPS(gps.satellites.value(), gps.satellites.isValid());
         h_dop = validGPS(gps.hdop.hdop(), gps.hdop.isValid());
+        
         llt2ecef(ecef_a, latt, longi, alt); //Coordenadas XYZ de posición actual
         llt2ecef(ecef_o, la_o, lo_o, alt_o); //Coordenadas XYZ de posición inicial
         llt2ecef(ecef_f, la_f, lo_f, alt_f); //Coordenadas XYZ de posición final
@@ -127,7 +129,9 @@ void loop()
         ecef2ned(ned_o, la_o, lo_o, ecef_o[0], ecef_o[1], ecef_o[2], ecef_o[0], ecef_o[1], ecef_o[2]);
         ecef2ned(ned_f, la_o, lo_o, ecef_o[0], ecef_o[1], ecef_o[2], ecef_f[0], ecef_f[1], ecef_f[2]);
         yaw_d = LOS(ned_o, ned_f, ned_a, Rp);
-        //Serial.println(yaw_d);
+        
+        dist_final=calcularDistancia (ned_f[1], ned_f[0], ned_a[1], ned_a[0]);
+        
 
       }
     }
@@ -138,6 +142,7 @@ void loop()
     DeserializationError err = deserializeJson(doc, Serial1);
     if (err == DeserializationError::Ok)
     {
+
       float yaw_t = doc["yaw_t"].as<float>();
       if (abs(yaw_d - yaw_t) > 0.052) { //Si la diferencia de angulos es mayor a 3° corregir rumbo
         LQR_control(yaw_d, yaw_t);
@@ -155,10 +160,6 @@ void loop()
       //Serial.print("ned_f[1]= ");
       Serial.print(ned_f[1]); Serial.print(" , ");
       Serial.print(input_rasp); Serial.print(" , ");
-      //Serial.print("ang= ");
-      //      Serial.print(cour); Serial.print(" , ");
-      //      Serial.print(ang, 4); Serial.print(" , ");
-      //      //Serial.print("yaw_t = ");
       Serial.print(doc["yaw_t"].as<float>(), 4); Serial.print(" , ");
       //Serial.print("yaw_d = ");
       Serial.print(yaw_d, 4); Serial.print(" , ");
@@ -180,7 +181,6 @@ void loop()
     //delay(500);
 
   }
-
 
   if (start_save) {
     digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
@@ -259,7 +259,6 @@ void m12() { //mover motores al valor que llegue por bt para diferentes PWM
   }
 }
 
-
 void parar() {
   esc1.writeMicroseconds(0);
   esc2.writeMicroseconds(0);
@@ -270,9 +269,7 @@ void move_usv(int m1, int m2) {
   esc2.writeMicroseconds(m2);
 }
 
-
 void zigzag(int m1, int m2) {
-
   for (int i = 0; i <= 2 ; i++) {
     esc1.writeMicroseconds(1500);
     esc2.writeMicroseconds(round(1300));
@@ -410,4 +407,9 @@ float validGPS(float val, bool valid)
   {
     return  0;
   }
+}
+
+float calcularDistancia(float x1, float y1, float x2, float y2)
+{
+    return sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2));
 }
